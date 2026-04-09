@@ -1,0 +1,25 @@
+# --- Reglas para archivos de datos pesados ---
+# Ignora cualquier archivo que termine en 4096.m en cualquier carpeta
+**/*4096.m
+
+# --- Reglas para binarios y compilación (Global) ---
+# Ignora archivos objeto
+*.o
+# Ignora archivos de salida comunes
+*.out
+# Ignora carpetas de compilación
+build/
+bin/
+
+# --- Regla avanzada para ejecutables de Linux sin extensión ---
+# Esta regla ignora archivos que no tienen punto en el nombre
+# pero permite las carpetas y los archivos de código fuente.
+*
+!*/
+!*.c
+!*.h
+!*.cpp
+!*.hpp
+!Makefile
+!.gitignore
+!README.md
