@@ -22,6 +22,9 @@ long int  TOTAL, UNIQUE;
 /**********************************************/
 /* Display the Board Image                    */
 /**********************************************/
+/*
+    No se usa por optimizacion(esta comentada), pero imprimiria x cada solucion un tablero con la misma
+*/
 void Display(void)
 {
     int  y, bit;
@@ -37,6 +40,18 @@ void Display(void)
 /**********************************************/
 /* Check Unique Solutions                     */
 /**********************************************/
+
+/*  Dada una solucion valida, la funcion check se encarga de dos cosas:
+    1-  Rota el tablero para buscar soluciones validas producto de las rotaciones,
+        es decir, las reinas tienen la misma disposicion pero con cierta rotacion.
+    2-  Decidir si la solucion inicial encontrada(por la cual se llamo a la funcion Check)
+        es la de menor peso entre su grupo de soluciones(rotaciones tambien solucion correcta),
+        para determinar si es la de menor peso, busca cual tiene la reina mas cerca del origen,
+        siendo esta solucion la representativa del grupo, es decir la que va a ser sumada como solucion
+        y multiplicada por la cant de soluciones que corresponda. En caso de que la solucion que se analiza
+        no sea la de menor peso, se descarta sabiendo que vendra tarde o temprano la solucion  del grupo que 
+        sumara finalmente.
+*/
 void Check(void)
 {
     int  *own, *you, bit, ptn;
@@ -118,6 +133,14 @@ void Backtrack2(int y, int left, int down, int right)
 /**********************************************/
 /* First queen is in the corner               */
 /**********************************************/
+/*
+BUSCA SOLUCIONES EN LOS CASOS DONDE LA PRIEMR REINA CAE EN LA ESQ SUP IZQ, POSICION 0,0, SABIENDO QUE 
+POR LA EXPLICACION DE ABAJO ESTO GENERA SOLUCIONES UNICAS POR LO QUE NO SE EJECUTA Check Y SE CUENTA COMO BOUND8 DIRECTAMENTE
+Si un tablero tiene una reina en la esquina, es matemáticamente imposible que ese tablero sea perfectamente 
+simétrico si lo rotas 90° o 180° (salvo en un tablero de 1x1). Además, como el algoritmo explora de forma ordenada,
+sabe que ninguna otra rama generará un tablero que, al rotarse, tenga una reina en esta esquina específica de esta manera.
+*/
+
 void Backtrack1(int y, int left, int down, int right)
 {
     int  bitmap, bit;
@@ -143,6 +166,11 @@ void Backtrack1(int y, int left, int down, int right)
 /**********************************************/
 /* Search of N-Queens                         */
 /**********************************************/
+/*
+    LA PRIMER REINA SOLO SE COLOCA SOLO EN UNA DE LAS PRIMERAS N/2 COLUMNAS, YA QUE LA OTRA MITAD SON ESPEJISMOS 
+    DE LAS PRIMERAS, EL RESTO DE REINAS SI SE DISTRIBUYEN EN CUALQUIERA DE LAS N COLUMNAS
+*/
+
 void NQueens(void)
 {
     int  bit, cant;
