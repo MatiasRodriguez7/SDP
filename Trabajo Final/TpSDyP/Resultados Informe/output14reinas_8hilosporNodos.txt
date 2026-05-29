@@ -1,0 +1,22 @@
+N=14  Hilos por nodo=8  Procesos MPI=2
+Soluciones únicas : 45752
+Soluciones totales: 365596
+Tiempo de ejecución: 0.017645 segundos
+Nodo 0: Tiempo del hilo 0: 0.014770 segundos
+Nodo 0: Tiempo del hilo 1: 0.014831 segundos
+Nodo 0: Tiempo del hilo 2: 0.015084 segundos
+Nodo 0: Tiempo del hilo 3: 0.016462 segundos
+Nodo 0: Tiempo del hilo 4: 0.014630 segundos
+Nodo 0: Tiempo del hilo 5: 0.013994 segundos
+Nodo 0: Tiempo del hilo 6: 0.014995 segundos
+Nodo 0: Tiempo del hilo 7: 0.014364 segundos
+Nodo 0: Promedio de tiempo de los hilos: 0.014891 segundos
+Nodo 1: Tiempo del hilo 0: 0.015619 segundos
+Nodo 1: Tiempo del hilo 1: 0.015775 segundos
+Nodo 1: Tiempo del hilo 2: 0.015119 segundos
+Nodo 1: Tiempo del hilo 3: 0.015459 segundos
+Nodo 1: Tiempo del hilo 4: 0.015098 segundos
+Nodo 1: Tiempo del hilo 5: 0.015072 segundos
+Nodo 1: Tiempo del hilo 6: 0.014230 segundos
+Nodo 1: Tiempo del hilo 7: 0.013872 segundos
+Nodo 1: Promedio de tiempo de los hilos: 0.015030 segundos

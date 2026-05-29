@@ -1,0 +1,10 @@
+N=16  Hilos por nodo=2  Procesos MPI=2
+Soluciones únicas : 1846955
+Soluciones totales: 14772512
+Tiempo de ejecución: 2.371074 segundos
+Nodo 0: Tiempo del hilo 0: 2.277532 segundos
+Nodo 0: Tiempo del hilo 1: 2.278729 segundos
+Nodo 0: Promedio de tiempo de los hilos: 2.278131 segundos
+Nodo 1: Tiempo del hilo 0: 2.370674 segundos
+Nodo 1: Tiempo del hilo 1: 2.368575 segundos
+Nodo 1: Promedio de tiempo de los hilos: 2.369624 segundos
