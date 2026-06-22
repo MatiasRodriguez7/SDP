@@ -15,7 +15,6 @@
  * Constantes
  *--------------------------------------------------------------------------*/
 #define MAXSIZE 18
-#define MAXHILOS 64
 /*---------------------------------------------------------------------------
  * Tipos de tarea
  * TIPO_BT1: primera reina en esquina (col 0), usa Backtrack1

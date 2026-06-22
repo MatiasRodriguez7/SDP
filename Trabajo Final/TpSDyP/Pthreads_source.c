@@ -353,22 +353,19 @@ static void *funcion_hilo(void *arg)
     int SIZE = size;
     int SIZEE = SIZE - 1;
     int MASK  = (1 << SIZE) - 1;
-    int TOPBIT = 1 << SIZEE;
+    int TOPBIT = 1 << SIZEE;  
+    int idx;
+
 
     /* Tablero local: cada hilo tiene el suyo para evitar condiciones de carrera */
     int BOARD[MAXSIZE];
 
-    while (1) {
-        /* Tomar la siguiente tarea del pool */
-        pthread_mutex_lock(&(pool->mutex));
-        int idx = pool->siguiente;
-        if (idx >= pool->total) {
-            pthread_mutex_unlock(&(pool->mutex));
-            break;  /* pool vacío, el hilo termina */
-        }
+    /* Tomar la siguiente tarea del pool */
+    pthread_mutex_lock(&(pool->mutex));
+    idx = pool->siguiente;
+    while (idx < pool->total) {
         pool->siguiente++;
         pthread_mutex_unlock(&(pool->mutex));
-
         Tarea *t = &(pool->tareas[idx]);
 
         /* Restaurar las dos primeras filas fijas de la tarea */
@@ -401,10 +398,13 @@ static void *funcion_hilo(void *arg)
                        SIZEE, MASK, TOPBIT,
                        count8, count4, count2, id);
         }
+        pthread_mutex_lock(&(pool->mutex));
+        idx = pool->siguiente;
     }
+    pthread_mutex_unlock(&(pool->mutex));
     // Guardar el tiempo total de ejecución del hilo
     tiempo[id] = dwalltime() - t_ini;
-    return NULL;
+    pthread_exit(NULL);
 }
 
 /*===========================================================================

@@ -22,42 +22,43 @@
 
 
 /*===========================================================================
- * generar_tareas
+ * recorrer_arbol — núcleo único de enumeración de tareas
  *
- * Construye el pool de tareas para este proceso MPI usando dos niveles de
- * fila fijos, lo que produce muchas tareas pequeñas y mejora el balance
- * de carga del pool dinámico de Pthreads.
+ * Replica los dos bucles de NQueens() secuencial (BT1 y BT2) para
+ * enumerar las tareas que le corresponden a este proceso MPI según la
+ * distribución round-robin (tarea i → proceso i % num_procs).
  *
- * Esta función pertenece a MPI_source.c porque su lógica mezcla:
- *   - Dominio del problema (replicar el bucle de NQueens para generar tareas)
- *   - Distribución MPI     (round-robin por rank para repartir entre nodos)
- * No tiene nada que ver con la creación o sincronización de hilos.
+ * Esta función tiene DOS MODOS de operación, controlados por el
+ * parámetro buf:
  *
- * Distribución estática entre procesos MPI:
- *   La tarea global número i le corresponde al proceso (i % num_procs).
- *   Con num_procs=2: proceso 0 toma tareas 0,2,4,... y proceso 1 toma 1,3,5,...
- *   Esto intercala tareas pesadas y livianas entre nodos sin comunicación MPI.
+ *   buf == NULL  →  modo CONTEO: recorre el árbol pero no escribe nada,
+ *                   solo cuenta cuántas tareas le corresponden a este
+ *                   proceso. Es la base de contar_tareas().
  *
- * Dos niveles de fila:
- *   - Bloque BT1: fija reinas en filas 0, 1 y 2 → backtracking arranca en fila 3
- *   - Bloque BT2: fija reinas en filas 0 y 1   → backtracking arranca en fila 2
+ *   buf != NULL  →  modo LLENADO: asume que buf ya tiene exactamente el
+ *                   tamaño retornado por una llamada previa en modo
+ *                   conteo, y completa cada Tarea en buf[0..total-1].
+ *                   Es la base de llenar_tareas().
  *
- * La memoria del arreglo de tareas se reserva aquí (antes de medir tiempo)
- * y el llamador es responsable de liberarla con free() al terminar.
+ * Implementar el recorrido una sola vez (en lugar de duplicar la lógica
+ * de los bucles en dos funciones separadas) garantiza que el conteo y
+ * el llenado caminen exactamente por el mismo camino de ejecución: si en
+ * el futuro se modifica una restricción de BOUND1/SIDEMASK, alcanza con
+ * tocar este único lugar. Duplicar la lógica sería un riesgo de bugs:
+ * si el conteo y el llenado llegaran a divergir, el llenado escribiría
+ * fuera de los límites del arreglo ya reservado.
+ *
+ * En ambos modos retorna la cantidad de tareas de este proceso.
  *=========================================================================*/
-static void generar_tareas(int size, int rank, int num_procs, Pool *pool)
+static int recorrer_arbol(int size, int rank, int num_procs, Tarea *buf)
 {
     /* Constantes del tablero, iguales que en NQueens() secuencial */
     int SIZEE  = size - 1;
     int TOPBIT = 1 << SIZEE;               /* bit de la columna N-1          */
     int MASK   = (1 << size) - 1;          /* N bits a 1                     */
 
-    /* Reserva sobredimensionada: en el peor caso hay O(N²) tareas.
-     * Al final se ajusta con realloc al tamaño real. */
-    int    capacidad    = size * size * 2;
-    Tarea *buf          = (Tarea *)malloc(capacidad * sizeof(Tarea));
-    int    total_global = 0;   /* contador global de tareas (antes del filtro) */
-    int    total_local  = 0;   /* tareas que le corresponden a este proceso    */
+    int total_global = 0;   /* contador global de tareas (antes del filtro) */
+    int total_local  = 0;   /* tareas que le corresponden a este proceso    */
 
     int bit1, left2, down2, right2, bitmap2, bit_col2;
 
@@ -104,25 +105,29 @@ static void generar_tareas(int size, int rank, int num_procs, Pool *pool)
             /* Distribución round-robin: esta tarea global le toca al proceso
              * cuyo rank es (total_global % num_procs) */
             if ((total_global % num_procs) == rank) {
-                Tarea *t  = &buf[total_local];
-                t->tipo   = TIPO_BT1;
-                t->board0 = 1;          /* reina fila 0 en col 0 (esquina)  */
-                t->board1 = bit1;       /* reina fila 1 en col BOUND1       */
-                t->bound1 = BOUND1;
-                t->bound2 = 0;          /* no usado en BT1                  */
-                t->y_inicio = 3;        /* fila 3 es la primera libre       */
+                /* Modo llenado: completar la tarea en el arreglo ya
+                 * reservado al tamaño exacto. Modo conteo: omitir. */
+                if (buf != NULL) {
+                    Tarea *t  = &buf[total_local];
+                    t->tipo   = TIPO_BT1;
+                    t->board0 = 1;          /* reina fila 0 en col 0 (esquina)  */
+                    t->board1 = bit1;       /* reina fila 1 en col BOUND1       */
+                    t->bound1 = BOUND1;
+                    t->bound2 = 0;          /* no usado en BT1                  */
+                    t->y_inicio = 3;        /* fila 3 es la primera libre       */
 
-                /* Propagar amenazas de la tercera reina (fila 2, col bit_col2)
-                 * para que el backtracking arranque con el estado correcto */
-                t->left  = ((left2  | bit_col2) << 1) & MASK;
-                t->down  =   down2  | bit_col2;
-                t->right = ((right2 | bit_col2) >> 1) & MASK;
+                    /* Propagar amenazas de la tercera reina (fila 2, col
+                     * bit_col2) para que el backtracking arranque con el
+                     * estado correcto */
+                    t->left  = ((left2  | bit_col2) << 1) & MASK;
+                    t->down  =   down2  | bit_col2;
+                    t->right = ((right2 | bit_col2) >> 1) & MASK;
 
-                /* BT1 no usa parámetros de simetría */
-                t->lastmask = 0;
-                t->endbit   = 0;
-                t->sidemask = 0;
-
+                    /* BT1 no usa parámetros de simetría */
+                    t->lastmask = 0;
+                    t->endbit   = 0;
+                    t->sidemask = 0;
+                }
                 total_local++;
             }
             total_global++;
@@ -151,8 +156,8 @@ static void generar_tareas(int size, int rank, int num_procs, Pool *pool)
     int ENDBIT   = TOPBIT >> 1;  /* columna esperada en última fila (180°)   */
 
     for (int BOUND1 = 1, BOUND2 = size - 2;
-         BOUND1 < BOUND2;
-         BOUND1++, BOUND2--) {
+        BOUND1 < BOUND2;
+        BOUND1++, BOUND2--) {
 
         /* bit1: bitmask de la primera reina en la columna BOUND1 */
         bit1 = 1 << BOUND1;
@@ -179,25 +184,27 @@ static void generar_tareas(int size, int rank, int num_procs, Pool *pool)
             bitmap1 ^= bit_col2;
 
             if ((total_global % num_procs) == rank) {
-                Tarea *t  = &buf[total_local];
-                t->tipo   = TIPO_BT2;
-                t->board0 = bit1;       /* reina fila 0 en col BOUND1       */
-                t->board1 = bit_col2;   /* reina fila 1 en col libre        */
-                t->bound1 = BOUND1;
-                t->bound2 = BOUND2;
-                t->y_inicio = 2;        /* fila 2 es la primera libre       */
+                /* Modo llenado: completar la tarea. Modo conteo: omitir. */
+                if (buf != NULL) {
+                    Tarea *t  = &buf[total_local];
+                    t->tipo   = TIPO_BT2;
+                    t->board0 = bit1;       /* reina fila 0 en col BOUND1       */
+                    t->board1 = bit_col2;   /* reina fila 1 en col libre        */
+                    t->bound1 = BOUND1;
+                    t->bound2 = BOUND2;
+                    t->y_inicio = 2;        /* fila 2 es la primera libre       */
 
-                /* Propagar amenazas de las dos primeras reinas */
-                t->left  = ((left1  | bit_col2) << 1) & MASK;
-                t->down  =   down1  | bit_col2;
-                t->right = ((right1 | bit_col2) >> 1) & MASK;
+                    /* Propagar amenazas de las dos primeras reinas */
+                    t->left  = ((left1  | bit_col2) << 1) & MASK;
+                    t->down  =   down1  | bit_col2;
+                    t->right = ((right1 | bit_col2) >> 1) & MASK;
 
-                /* Guardar estado de simetría de esta iteración del bucle:
-                 * cada iteración tiene valores distintos de estos tres */
-                t->lastmask = LASTMASK;
-                t->endbit   = ENDBIT;
-                t->sidemask = SIDEMASK;
-
+                    /* Guardar estado de simetría de esta iteración del
+                     * bucle: cada iteración tiene valores distintos */
+                    t->lastmask = LASTMASK;
+                    t->endbit   = ENDBIT;
+                    t->sidemask = SIDEMASK;
+                }
                 total_local++;
             }
             total_global++;
@@ -209,11 +216,39 @@ static void generar_tareas(int size, int rank, int num_procs, Pool *pool)
         ENDBIT   >>= 1;
     }
 
-    /* Ajustar el arreglo al tamaño real de tareas de este proceso */
-    pool->tareas    = (Tarea *)realloc(buf, total_local * sizeof(Tarea));
-    pool->total     = total_local;
-    pool->siguiente = 0;
-    pthread_mutex_init(&pool->mutex, NULL);
+    return total_local;
+}
+
+/*===========================================================================
+ * contar_tareas
+ *
+ * Wrapper delgado sobre recorrer_arbol() en modo conteo (buf=NULL).
+ * Recorre el árbol de búsqueda sin escribir nada, solo para determinar
+ * cuántas tareas le corresponden a este proceso. El resultado se usa
+ * para reservar memoria con el tamaño exacto, sin sobrante.
+ *
+ * Esta función representa trabajo de cómputo real (recorrido del árbol
+ * con poda), por lo que SÍ debe incluirse en el tiempo medido.
+ *=========================================================================*/
+static int contar_tareas(int size, int rank, int num_procs)
+{
+    return recorrer_arbol(size, rank, num_procs, NULL);
+}
+
+/*===========================================================================
+ * llenar_tareas
+ *
+ * Wrapper delgado sobre recorrer_arbol() en modo llenado (buf != NULL).
+ * Recorre el mismo árbol que contar_tareas() y completa cada Tarea en
+ * el arreglo buf, que el llamador debe haber reservado previamente con
+ * exactamente el tamaño retornado por contar_tareas().
+ *
+ * Esta función también representa cómputo real y debe incluirse en el
+ * tiempo medido.
+ *=========================================================================*/
+static void llenar_tareas(int size, int rank, int num_procs, Tarea *buf)
+{
+    recorrer_arbol(size, rank, num_procs, buf);
 }
 
 /*===========================================================================
@@ -263,36 +298,80 @@ int main(int argc, char *argv[])
     long int *count2_local = (long int *)malloc(num_hilos * sizeof(long int));
     double *tiempo = (double *)malloc(num_hilos * sizeof(double));//vetor para calculo de tiempo de hilos
     long int *idx = (long int *)malloc(num_hilos * sizeof(long int));
-
+    //posicion 0= count2, posicion 1=count4, posicion 2=count8
+    long int *count_nodo = (long int *)calloc(3, sizeof(long int));
+    long int *count_total = (long int *)malloc(3 * sizeof(long int));
 
     /*-----------------------------------------------------------------------
-     * Inicio de la medición de tiempo (solo cómputo + comunicación)
+     * Medición de tiempo por segmentos
      *
-     * El tiempo arranca DESPUÉS de la inicialización del pool y
-     * ANTES de lanzar los hilos, tal como pide el enunciado:
-     * NO incluir alocación/inicialización de estructuras.
+     * A diferencia de la versión anterior, ahora la generación de tareas
+     * (contar + llenar) SÍ se considera cómputo y debe medirse, pero la
+     * alocación de memoria para el pool no puede medirse porque su tamaño
+     * exacto recién se conoce al terminar el conteo.
+     *
+     * Solución: medir cada segmento de cómputo/comunicación por separado
+     * con dwalltime() y acumular sus duraciones en tiempo_nodo. El hueco
+     * entre segmentos (donde ocurre el malloc del pool) no se mide nunca,
+     * porque no hay ningún dwalltime() llamado durante ese hueco.
      *----------------------------------------------------------------------*/
+    double tiempo_nodo = 0.0;
+    double t0, t1;
+
     MPI_Barrier(MPI_COMM_WORLD);
-    double t_ini = dwalltime();
-
-        /*-----------------------------------------------------------------------
-     * Generación del pool de tareas (distribución estática entre nodos)
+    /*-----------------------------------------------------------------------
+     * Segmento 1: contar tareas
      *
-     * Cada proceso genera SOLO las tareas que le corresponden según la
-     * distribución ciclica: tarea i → proceso (i % num_procs).
-     * No hay comunicación MPI en esta etapa.
+     * Recorre el árbol de búsqueda (poda incluida) para determinar
+     * exactamente cuántas tareas le corresponden a este proceso. Es
+     * cómputo real, por lo tanto se mide.
      *----------------------------------------------------------------------*/
-    generar_tareas(size, rank, num_procs, &pool);
+    t0 = dwalltime();
+    int num_tareas = contar_tareas(size, rank, num_procs);
+    t1 = dwalltime();
+    tiempo_nodo += (t1 - t0);
 
+    /*-----------------------------------------------------------------------
+     * Alocación EXACTA del pool — fuera de cualquier segmento medido.
+     *
+     * A diferencia de la versión anterior (capacidad = size*size*2 con
+     * realloc posterior), aquí se reserva el tamaño justo desde el
+     * principio. Esto es importante porque la sobre-reserva anterior era
+     * un múltiplo del total GLOBAL de tareas, no del total local de cada
+     * proceso: a medida que crece num_procs, cada proceso desperdicia una
+     * fracción cada vez mayor de esa reserva (con 16 procesos, cada uno
+     * reservaría memoria para ~16 veces más tareas de las que realmente
+     * usa). Reservar el tamaño exacto elimina ese desperdicio sin importar
+     * cuántos procesos MPI se utilicen.
+     *----------------------------------------------------------------------*/
+    Tarea *tareas = (Tarea *)malloc(num_tareas * sizeof(Tarea));
+
+    /*-----------------------------------------------------------------------
+     * Segmento 2: llenar tareas
+     *
+     * Recorre el mismo árbol (mismo camino de ejecución que contar_tareas,
+     * vía recorrer_arbol) y completa cada Tarea en el arreglo ya reservado
+     * al tamaño exacto. También es cómputo real, se mide.
+     *----------------------------------------------------------------------*/
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    t0 = dwalltime();
+    llenar_tareas(size, rank, num_procs, tareas);
+    t1 = dwalltime();
+    tiempo_nodo += (t1 - t0);
+
+    pool.tareas    = tareas;
+    pool.total     = num_tareas;
+    pool.siguiente = 0;
+    pthread_mutex_init(&pool.mutex, NULL);
     /*-----------------------------------------------------------------------
      * Lanzamiento de hilos Pthreads
      *
      * Todos los hilos del proceso compiten por tareas del pool local.
      *----------------------------------------------------------------------*/
-
+    t0 = dwalltime();
     lanzar_hilos(size, num_hilos, &pool, hilos, tiempo, idx,
                  count8_local, count4_local, count2_local);
-
     /*-----------------------------------------------------------------------
      * Reducción MPI: suma de contadores de todos los procesos hacia rank 0
      *
@@ -300,54 +379,61 @@ int main(int argc, char *argv[])
      * suma global. Los demás procesos reciben el resultado pero lo ignoran
      * (MPI_Reduce con root=0 es suficiente; no se necesita MPI_Allreduce).
      *----------------------------------------------------------------------*/
-    long int count8_total = 0;
-    long int count4_total = 0;
-    long int count2_total = 0;
 
-    long int count8_nodo = 0;
-    long int count4_nodo = 0;
-    long int count2_nodo = 0;
 
     for (int i = 0; i < num_hilos; i++) {
-        count8_nodo += count8_local[i];
-        count4_nodo += count4_local[i];
-        count2_nodo += count2_local[i];
+        count_nodo[2] += count8_local[i];
+        count_nodo[1] += count4_local[i];
+        count_nodo[0] += count2_local[i];
     }
 
-    MPI_Reduce(&count8_nodo, &count8_total, 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&count4_nodo, &count4_total, 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&count2_nodo, &count2_total, 1, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+
+    if(rank==0) {
+        MPI_Reduce(count_nodo, count_total, 3, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+
+    }else {
+        MPI_Reduce(count_nodo, NULL, 3, MPI_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    }
 
     /*-----------------------------------------------------------------------
      * Fin de la medición de tiempo
      *----------------------------------------------------------------------*/
-    double t_fin = dwalltime();
+    t1 = dwalltime();
+    tiempo_nodo += (t1 - t0);
 
     /*-----------------------------------------------------------------------
      * Resultado final (solo el proceso 0 calcula e imprime)
      *----------------------------------------------------------------------*/
-    if (rank == 0) {
-        long int unique = count8_total + count4_total + count2_total;
-        long int total  = count8_total * 8 + count4_total * 4 + count2_total * 2;
-
-        printf("N=%d  Hilos por nodo=%d  Procesos MPI=%d\n",size, num_hilos, num_procs);
-        printf("Soluciones únicas : %ld\n", unique);
-        printf("Soluciones totales: %ld\n", total);
-        printf("Tiempo de ejecución: %.6f segundos\n", t_fin - t_ini);
-    }
+    double max_h=-1;
     double promedio = 0;
     for(int i = 0; i < num_hilos; i++){
-        printf("Nodo %d: Tiempo del hilo %d: %.6f segundos\n", rank, i, tiempo[i]);
         //calcular promiedo de tiempo por nodo
+        if(max_h<tiempo[i])
+            max_h=tiempo[i];
         promedio += tiempo[i];
     }
+    if (rank != 0){
+        MPI_Reduce(&promedio, NULL, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce(&max_h, NULL, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+        MPI_Reduce(&tiempo_nodo, NULL, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
-    promedio /= num_hilos;
-    printf("Nodo %d: Promedio de tiempo de los hilos: %.6f segundos\n", rank, promedio);
+    }
+    if (rank == 0) {
+        double prom, max_t,tiempo_total;
+        long int unique = count_total[0] + count_total[1] + count_total[2];
+        long int total = count_total[0]*2 + count_total[1]*4 + count_total[2]*8;
+        //no lo contamos como computo porque es calculos para el informe y no para el programa
+        MPI_Reduce(&promedio, &prom, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+        prom/=num_hilos;
+        MPI_Reduce(&max_h, &max_t, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+        MPI_Reduce(&tiempo_nodo, &tiempo_total, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
-    /*-----------------------------------------------------------------------
-     * Liberación de recursos
-     *----------------------------------------------------------------------*/
+
+        printf("N=%d  Hilos por nodo=%d  Procesos MPI=%d  Balance de carga=%f\n",size, num_hilos, num_procs,(prom/max_t));
+        printf("Soluciones únicas : %ld\n", unique);
+        printf("Soluciones totales: %ld\n", total);
+        printf("Tiempo de ejecución: %.6f segundos\n", tiempo_total);
+    }
     /*-----------------------------------------------------------------------
      * Liberación de recursos
      *----------------------------------------------------------------------*/
@@ -356,6 +442,8 @@ int main(int argc, char *argv[])
     free(count8_local);
     free(count4_local);
     free(count2_local);
+    free(count_nodo);
+    free(count_total);
     free(tiempo);
     free(idx);
     pthread_mutex_destroy(&pool.mutex);
