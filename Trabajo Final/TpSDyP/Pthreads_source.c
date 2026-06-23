@@ -17,7 +17,7 @@ double dwalltime(void)
 int size;
 Pool *pool;
 double *tiempo;
-long int *id_threads;
+int *id_threads;
 long int *count8;
 long int *count4;
 long int *count2;
@@ -415,7 +415,7 @@ static void *funcion_hilo(void *arg)
 void lanzar_hilos(int size_arg, int num_hilos, Pool *pool_arg,
                  pthread_t *hilos, 
                  double *time,
-                 long int *id,
+                 int *id,
                  long int *count8_out,
                  long int *count4_out,
                  long int *count2_out)

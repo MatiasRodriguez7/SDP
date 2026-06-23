@@ -297,7 +297,7 @@ int main(int argc, char *argv[])
     long int *count4_local = (long int *)malloc(num_hilos * sizeof(long int));
     long int *count2_local = (long int *)malloc(num_hilos * sizeof(long int));
     double *tiempo = (double *)malloc(num_hilos * sizeof(double));//vetor para calculo de tiempo de hilos
-    long int *idx = (long int *)malloc(num_hilos * sizeof(long int));
+    int *idx = (int *)malloc(num_hilos * sizeof(int));
     //posicion 0= count2, posicion 1=count4, posicion 2=count8
     long int *count_nodo = (long int *)calloc(3, sizeof(long int));
     long int *count_total = (long int *)malloc(3 * sizeof(long int));
@@ -419,17 +419,19 @@ int main(int argc, char *argv[])
 
     }
     if (rank == 0) {
-        double prom, max_t,tiempo_total;
+        double prom, max_t,tiempo_total,i, balance;
         long int unique = count_total[0] + count_total[1] + count_total[2];
         long int total = count_total[0]*2 + count_total[1]*4 + count_total[2]*8;
         //no lo contamos como computo porque es calculos para el informe y no para el programa
         MPI_Reduce(&promedio, &prom, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-        prom/=num_hilos;
+        prom /= (num_hilos * num_procs);
         MPI_Reduce(&max_h, &max_t, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
         MPI_Reduce(&tiempo_nodo, &tiempo_total, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
-
-        printf("N=%d  Hilos por nodo=%d  Procesos MPI=%d  Balance de carga=%f\n",size, num_hilos, num_procs,(prom/max_t));
+        balance= prom/max_t;
+        printf("N=%d  Hilos por nodo=%d  Procesos MPI=%d  Balance de carga=%.6f\n",size, num_hilos, num_procs, balance);
+        printf("promedio hilo: %.6f segundos\n", prom);
+        printf("maximo hilo : %.6f segundos\n", max_t);
         printf("Soluciones únicas : %ld\n", unique);
         printf("Soluciones totales: %ld\n", total);
         printf("Tiempo de ejecución: %.6f segundos\n", tiempo_total);

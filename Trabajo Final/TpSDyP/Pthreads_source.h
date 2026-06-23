@@ -82,7 +82,7 @@ typedef struct {
 extern void lanzar_hilos(int size, int num_hilos, Pool *pool,
                  pthread_t *hilos, 
                  double *tiempo,
-                 long int *idx,
+                 int *idx,
                  long int *count8_out,
                  long int *count4_out,
                  long int *count2_out);
