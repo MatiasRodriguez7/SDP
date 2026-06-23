@@ -17,7 +17,8 @@ double dwalltime(void)
 int size;
 Pool *pool;
 double *tiempo;
-int *id_threads;
+pthread_mutex_t count_mutex;
+long int *id_threads;
 long int *count8;
 long int *count4;
 long int *count2;
@@ -39,8 +40,7 @@ long int *count2;
  * sus propios datos sin interferencia entre hilos.
  *=========================================================================*/
 static void Check(int *BOARD, int *BOARD1, int *BOARD2, int ENDBIT,
-                  int TOPBIT, int SIZEE,
-                  long int *count8, long int *count4, long int *count2, int id_threads)
+                  int TOPBIT, int SIZEE, long int *c8, long int *c4, long int *c2)
 {
     int *own, *you, bit, ptn;
 
@@ -88,8 +88,8 @@ static void Check(int *BOARD, int *BOARD1, int *BOARD2, int ENDBIT,
         /* Si el for terminó sin break (own superó BOARDE), todas las
          * filas coincidieron exactamente: el tablero rotado 90° es
          * idéntico al original. Simetría de orden 4 → vale ×2. */
-        if (own > BOARDE) {
-            count2[id_threads]++;
+        if (own > BOARDE) { //Symmetry of order 4
+            (*c2)++;
             return;
         }
     }
@@ -122,8 +122,8 @@ static void Check(int *BOARD, int *BOARD1, int *BOARD2, int ENDBIT,
 
         /* Todas las filas coinciden: rotación 180° es idéntica al original.
          * Simetría de orden 2 → vale ×4. */
-        if (own > BOARDE) {
-            count4[id_threads]++;
+        if (own > BOARDE) { //Symmetry of order 2
+            (*c4)++;
             return;
         }
     }
@@ -153,7 +153,7 @@ static void Check(int *BOARD, int *BOARD1, int *BOARD2, int ENDBIT,
 
     /* Ninguna rotación resultó menor ni idéntica:
      * este tablero es el canónico de su grupo de 8. Vale ×8. */
-    count8[id_threads]++;
+    (*c8)++;
 }
 
 /*===========================================================================
@@ -176,9 +176,7 @@ static void Check(int *BOARD, int *BOARD1, int *BOARD2, int ENDBIT,
  *=========================================================================*/
 static void Backtrack1(int y, int left, int down, int right,
                        int BOUND1, int *BOARD,
-                       int SIZEE, int MASK, int TOPBIT,
-                       long int *count8,
-                       int id_threads)
+                       int SIZEE, int MASK, int TOPBIT, long int *c8)
 {
     int bitmap, bit;
 
@@ -196,7 +194,7 @@ static void Backtrack1(int y, int left, int down, int right,
          *-----------------------------------------------------------------*/
         if (bitmap) {
             BOARD[y] = bitmap;  /* guarda la posición de la última reina   */
-            count8[id_threads]++;        /* cuenta directamente ×8, sin Check()     */
+            (*c8)++;        /* cuenta directamente ×8, sin Check()     */
         }
     } else {
         /*-------------------------------------------------------------------
@@ -239,7 +237,7 @@ static void Backtrack1(int y, int left, int down, int right,
                         down  | bit,
                        (right | bit) >> 1,
                        BOUND1, BOARD, SIZEE, MASK, TOPBIT,
-                       count8,id_threads);
+                       c8);
         }
     }
 }
@@ -264,7 +262,7 @@ static void Backtrack2(int y, int left, int down, int right,
                        int LASTMASK, int ENDBIT, int SIDEMASK,
                        int *BOARD, int *BOARD1, int *BOARD2,
                        int SIZEE, int MASK, int TOPBIT,
-                       long int *count8, long int *count4, long int *count2, int id_threads)
+                       long int *c8, long int *c4, long int *c2)
 {
     int bitmap, bit;
 
@@ -286,9 +284,8 @@ static void Backtrack2(int y, int left, int down, int right,
                 BOARD[y] = bitmap;
                 /* Check() verifica si este tablero es el canónico de su
                  * grupo de rotaciones y actualiza el contador correcto */
-                Check(BOARD, BOARD1, BOARD2, ENDBIT,
-                      TOPBIT, SIZEE,
-                      count8, count4, count2, id_threads);
+                Check(BOARD, BOARD1, BOARD2, ENDBIT, TOPBIT, SIZEE,
+                      c8, c4, c2);
             }
         }
     } else {
@@ -334,7 +331,7 @@ static void Backtrack2(int y, int left, int down, int right,
                        LASTMASK, ENDBIT, SIDEMASK,
                        BOARD, BOARD1, BOARD2,
                        SIZEE, MASK, TOPBIT,
-                       count8, count4, count2, id_threads);
+                       c8, c4, c2);
         }
     }
 }
@@ -349,6 +346,10 @@ static void Backtrack2(int y, int left, int down, int right,
 static void *funcion_hilo(void *arg)
 {
     double t_ini = dwalltime();
+    long int c8 = 0;
+    long int c4 = 0;
+    long int c2 = 0;
+
     int id=*(int*)arg;
     int SIZE = size;
     int SIZEE = SIZE - 1;
@@ -380,8 +381,7 @@ static void *funcion_hilo(void *arg)
             Backtrack1(t->y_inicio,
                        t->left, t->down, t->right,
                        t->bound1,
-                       BOARD, SIZEE, MASK, TOPBIT,
-                       count8,id);
+                       BOARD, SIZEE, MASK, TOPBIT, &c8);
         } else {
             /*
              * Backtrack2: reina en columna interior.
@@ -394,14 +394,21 @@ static void *funcion_hilo(void *arg)
                        t->left, t->down, t->right,
                        t->bound1, t->bound2,
                        t->lastmask, t->endbit, t->sidemask,
-                       BOARD, BOARD1, BOARD2,
-                       SIZEE, MASK, TOPBIT,
-                       count8, count4, count2, id);
+                       BOARD, BOARD1, BOARD2, SIZEE, MASK, TOPBIT,
+                       &c8, &c4, &c2);
         }
         pthread_mutex_lock(&(pool->mutex));
         idx = pool->siguiente;
     }
     pthread_mutex_unlock(&(pool->mutex));
+
+    // Sumar contadores locales a los globales con protección de mutex
+    pthread_mutex_lock(&count_mutex);
+    *count8 += c8;
+    *count4 += c4;
+    *count2 += c2;
+    pthread_mutex_unlock(&count_mutex);
+
     // Guardar el tiempo total de ejecución del hilo
     tiempo[id] = dwalltime() - t_ini;
     pthread_exit(NULL);
@@ -413,26 +420,21 @@ static void *funcion_hilo(void *arg)
  * Crea num_hilos hilos, espera que terminen y suma sus contadores locales.
  *=========================================================================*/
 void lanzar_hilos(int size_arg, int num_hilos, Pool *pool_arg,
-                 pthread_t *hilos, 
-                 double *time,
-                 int *id,
-                 long int *count8_out,
-                 long int *count4_out,
-                 long int *count2_out)
+                 pthread_t *hilos, double *time, long int *id,
+                 long int *count8_arg, long int *count4_arg, long int *count2_arg)
 {    /* Inicializar argumentos de cada hilo */
     size=size_arg;
     pool=pool_arg;
     tiempo=time;
     id_threads=id;
-    count8=count8_out;
-    count4=count4_out;
-    count2=count2_out;
-    for (int i = 0; i < num_hilos; i++) {
-        tiempo[i] = 0;
-        count8[i] = 0;
-        count4[i] = 0;
-        count2[i] = 0;
-    }
+    count8 = count8_arg;
+    count4 = count4_arg;
+    count2 = count2_arg;
+
+    pthread_mutex_init(&count_mutex, NULL);
+    *count8 = 0;
+    *count4 = 0;
+    *count2 = 0;
 
     /* Lanzar hilos */
     for (int i = 0; i < num_hilos; i++){
@@ -443,9 +445,5 @@ void lanzar_hilos(int size_arg, int num_hilos, Pool *pool_arg,
     for (int i = 0; i < num_hilos; i++)
         pthread_join(hilos[i], NULL);
 
-    /* Reducción local: sumar contadores de todos los hilos */
-   // *count8_out = 0;
-   // *count4_out = 0;
-   // *count2_out = 0;
-    
+    pthread_mutex_destroy(&count_mutex); // Destruir mutex de contadores
 }

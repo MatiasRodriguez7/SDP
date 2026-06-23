@@ -292,13 +292,10 @@ int main(int argc, char *argv[])
 
     Pool pool;
     //alocacion de hilos y argumentos de hilos para lanzar_hilos
-    pthread_t *hilos = (pthread_t *)malloc(num_hilos * sizeof(pthread_t));
-    long int *count8_local = (long int *)malloc(num_hilos * sizeof(long int));
-    long int *count4_local = (long int *)malloc(num_hilos * sizeof(long int));
-    long int *count2_local = (long int *)malloc(num_hilos * sizeof(long int));
+    pthread_t *hilos = (pthread_t *)malloc(num_hilos * sizeof(pthread_t));    
     double *tiempo = (double *)malloc(num_hilos * sizeof(double));//vetor para calculo de tiempo de hilos
-    int *idx = (int *)malloc(num_hilos * sizeof(int));
-    //posicion 0= count2, posicion 1=count4, posicion 2=count8
+    long int *idx = (long int *)malloc(num_hilos * sizeof(long int));
+    //posicion 0=count2, posicion 1=count4, posicion 2=count8
     long int *count_nodo = (long int *)calloc(3, sizeof(long int));
     long int *count_total = (long int *)malloc(3 * sizeof(long int));
 
@@ -371,7 +368,7 @@ int main(int argc, char *argv[])
      *----------------------------------------------------------------------*/
     t0 = dwalltime();
     lanzar_hilos(size, num_hilos, &pool, hilos, tiempo, idx,
-                 count8_local, count4_local, count2_local);
+                 &count_nodo[2], &count_nodo[1], &count_nodo[0]);
     /*-----------------------------------------------------------------------
      * Reducción MPI: suma de contadores de todos los procesos hacia rank 0
      *
@@ -379,13 +376,6 @@ int main(int argc, char *argv[])
      * suma global. Los demás procesos reciben el resultado pero lo ignoran
      * (MPI_Reduce con root=0 es suficiente; no se necesita MPI_Allreduce).
      *----------------------------------------------------------------------*/
-
-
-    for (int i = 0; i < num_hilos; i++) {
-        count_nodo[2] += count8_local[i];
-        count_nodo[1] += count4_local[i];
-        count_nodo[0] += count2_local[i];
-    }
 
 
     if(rank==0) {
@@ -441,9 +431,6 @@ int main(int argc, char *argv[])
      *----------------------------------------------------------------------*/
     free(pool.tareas);
     free(hilos);
-    free(count8_local);
-    free(count4_local);
-    free(count2_local);
     free(count_nodo);
     free(count_total);
     free(tiempo);

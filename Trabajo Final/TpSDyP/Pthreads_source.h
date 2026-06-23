@@ -82,10 +82,10 @@ typedef struct {
 extern void lanzar_hilos(int size, int num_hilos, Pool *pool,
                  pthread_t *hilos, 
                  double *tiempo,
-                 int *idx,
-                 long int *count8_out,
-                 long int *count4_out,
-                 long int *count2_out);
+                 long int *id,
+                 long int *count8,
+                 long int *count4,
+                 long int *count2);
 
 // Función para medir el tiempo (dwalltime)
 extern double dwalltime(void);
