@@ -1,9 +1,3 @@
-/*****************************************************************************
- * Pthreads_source.c
- * Módulo Pthreads para la paralelización de N-Reinas
- * Sistemas Distribuidos y Paralelos - UNLP 2026
- *****************************************************************************/
-
 #include "Pthreads_source.h"
 
 double dwalltime(void)
@@ -122,7 +116,7 @@ static void Check(int *BOARD, int *BOARD1, int *BOARD2, int ENDBIT,
 
         /* Todas las filas coinciden: rotación 180° es idéntica al original.
          * Simetría de orden 2 → vale ×4. */
-        if (own > BOARDE) { //Symmetry of order 2
+        if (own > BOARDE) { 
             (*c4)++;
             return;
         }

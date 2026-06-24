@@ -1,13 +1,4 @@
 /*****************************************************************************
- * MPI_source.c
- * Programa principal MPI para la paralelización de N-Reinas
- * Sistemas Distribuidos y Paralelos - UNLP 2026
- *
- * Compilación:
- *   mpicc -O2 -o nreinas_par MPI_source.c Pthreads_source.c -lpthread
- *
- * Ejecución (ejemplo 2 nodos, 4 cores cada uno = 8 hilos por proceso):
- *   mpirun -np 2 --hostfile hosts ./nreinas_par 16 8
  *
  * Argumentos:
  *   argv[1]: N (tamaño del tablero, entre 14 y 18)
@@ -39,16 +30,6 @@
  *                   tamaño retornado por una llamada previa en modo
  *                   conteo, y completa cada Tarea en buf[0..total-1].
  *                   Es la base de llenar_tareas().
- *
- * Implementar el recorrido una sola vez (en lugar de duplicar la lógica
- * de los bucles en dos funciones separadas) garantiza que el conteo y
- * el llenado caminen exactamente por el mismo camino de ejecución: si en
- * el futuro se modifica una restricción de BOUND1/SIDEMASK, alcanza con
- * tocar este único lugar. Duplicar la lógica sería un riesgo de bugs:
- * si el conteo y el llenado llegaran a divergir, el llenado escribiría
- * fuera de los límites del arreglo ya reservado.
- *
- * En ambos modos retorna la cantidad de tareas de este proceso.
  *=========================================================================*/
 static int recorrer_arbol(int size, int rank, int num_procs, Tarea *buf)
 {
@@ -302,12 +283,7 @@ int main(int argc, char *argv[])
     /*-----------------------------------------------------------------------
      * Medición de tiempo por segmentos
      *
-     * A diferencia de la versión anterior, ahora la generación de tareas
-     * (contar + llenar) SÍ se considera cómputo y debe medirse, pero la
-     * alocación de memoria para el pool no puede medirse porque su tamaño
-     * exacto recién se conoce al terminar el conteo.
-     *
-     * Solución: medir cada segmento de cómputo/comunicación por separado
+     * Medimos cada segmento de cómputo/comunicación por separado
      * con dwalltime() y acumular sus duraciones en tiempo_nodo. El hueco
      * entre segmentos (donde ocurre el malloc del pool) no se mide nunca,
      * porque no hay ningún dwalltime() llamado durante ese hueco.
@@ -319,9 +295,8 @@ int main(int argc, char *argv[])
     /*-----------------------------------------------------------------------
      * Segmento 1: contar tareas
      *
-     * Recorre el árbol de búsqueda (poda incluida) para determinar
-     * exactamente cuántas tareas le corresponden a este proceso. Es
-     * cómputo real, por lo tanto se mide.
+     * Recorre el árbol de búsqueda para determinar
+     * exactamente cuántas tareas le corresponden a este proceso.
      *----------------------------------------------------------------------*/
     t0 = dwalltime();
     int num_tareas = contar_tareas(size, rank, num_procs);
@@ -329,17 +304,7 @@ int main(int argc, char *argv[])
     tiempo_nodo += (t1 - t0);
 
     /*-----------------------------------------------------------------------
-     * Alocación EXACTA del pool — fuera de cualquier segmento medido.
-     *
-     * A diferencia de la versión anterior (capacidad = size*size*2 con
-     * realloc posterior), aquí se reserva el tamaño justo desde el
-     * principio. Esto es importante porque la sobre-reserva anterior era
-     * un múltiplo del total GLOBAL de tareas, no del total local de cada
-     * proceso: a medida que crece num_procs, cada proceso desperdicia una
-     * fracción cada vez mayor de esa reserva (con 16 procesos, cada uno
-     * reservaría memoria para ~16 veces más tareas de las que realmente
-     * usa). Reservar el tamaño exacto elimina ese desperdicio sin importar
-     * cuántos procesos MPI se utilicen.
+     * Alocación EXACTA del pool 
      *----------------------------------------------------------------------*/
     Tarea *tareas = (Tarea *)malloc(num_tareas * sizeof(Tarea));
 
@@ -348,7 +313,7 @@ int main(int argc, char *argv[])
      *
      * Recorre el mismo árbol (mismo camino de ejecución que contar_tareas,
      * vía recorrer_arbol) y completa cada Tarea en el arreglo ya reservado
-     * al tamaño exacto. También es cómputo real, se mide.
+     * al tamaño exacto.
      *----------------------------------------------------------------------*/
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -363,8 +328,6 @@ int main(int argc, char *argv[])
     pthread_mutex_init(&pool.mutex, NULL);
     /*-----------------------------------------------------------------------
      * Lanzamiento de hilos Pthreads
-     *
-     * Todos los hilos del proceso compiten por tareas del pool local.
      *----------------------------------------------------------------------*/
     t0 = dwalltime();
     lanzar_hilos(size, num_hilos, &pool, hilos, tiempo, idx,
@@ -373,8 +336,7 @@ int main(int argc, char *argv[])
      * Reducción MPI: suma de contadores de todos los procesos hacia rank 0
      *
      * Cada proceso envía sus contadores locales. El proceso 0 recibe la
-     * suma global. Los demás procesos reciben el resultado pero lo ignoran
-     * (MPI_Reduce con root=0 es suficiente; no se necesita MPI_Allreduce).
+     * suma global.
      *----------------------------------------------------------------------*/
 
 

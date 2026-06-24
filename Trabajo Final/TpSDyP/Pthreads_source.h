@@ -1,9 +1,3 @@
-/*****************************************************************************
- * Pthreads_source.h
- * Módulo Pthreads para la paralelización de N-Reinas
- * Sistemas Distribuidos y Paralelos - UNLP 2026
- *****************************************************************************/
-
 #ifndef PTHREADS_SOURCE_H
 #define PTHREADS_SOURCE_H
 
@@ -74,7 +68,6 @@ typedef struct {
  *     num_hilos   : cantidad de hilos a crear
  *     pool        : pool de tareas compartido
  *     hilos       : puntero a arreglo de pthread_t para almacenar los hilos
- *     args         : puntero a arreglo de ArgHilo para almacenar los argumentos
  *     count8_out  : puntero donde se devuelve la suma de COUNT8 de todos los hilos
  *     count4_out  : puntero donde se devuelve la suma de COUNT4
  *     count2_out  : puntero donde se devuelve la suma de COUNT2
