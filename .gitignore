@@ -6,7 +6,6 @@
 # Ignora archivos objeto
 *.o
 # Ignora archivos de salida comunes
-*.out
 # Ignora carpetas de compilación
 build/
 bin/
